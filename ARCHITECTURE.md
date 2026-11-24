@@ -1,6 +1,6 @@
 # ARCHITECTURE — Distributed Wagering Processor
 
-> **Estado do documento:** planejamento concluído (decisões D01–D14 aprovadas em 2026-11-24). Nenhum código de aplicação foi escrito ainda.
+> **Estado do documento:** decisões D01–D14 aprovadas em 2026-11-24; Fase 0 (spike e fundação) validada.
 > Decisões convencionais estão na seção 3.
 
 ---
@@ -75,7 +75,7 @@ Legenda de status: **Proposta** (aguardando aprovação) · **Aprovada** · **Su
 - **Contexto:** §4 (ORM), §6.0, §6.1 (domínio sem tipos do ORM).
 - **Decisão:** **MikroORM 7** com `EntityManager.transactional()`. Entidades de persistência separadas do domínio (`WalletRecord`, `WagerTransactionRecord`…), definidas com `defineEntity`/`EntitySchema` (sem decorators) e com mappers explícitos que usam `rehydrate`. O lock é feito com `LockMode.PESSIMISTIC_WRITE`; SQL cru apenas onde o ORM não expressa (`SKIP LOCKED` com lease, agregações da reconciliação, `NOWAIT` para métrica).
 - **Alternativas descartadas:** mapear o MikroORM direto sobre as classes de domínio; usar MikroORM apenas como QueryBuilder; TypeORM (mantido como fallback caso o spike F0 sob Bun falhe).
-- **Consequências:** domínio 100% puro, ao custo de mappers. Precisa de spike sob Bun (migrator com import estático).
+- **Consequências:** domínio 100% puro, ao custo de mappers. **Validado na F0:** MikroORM 7.2 + `@mikro-orm/nestjs` 7.1 + `defineEntity` + `Migrator` com registro estático de migrations funcionam sob Bun 1.2 (up/down reversível e `transactional()`).
 
 ### D06 — Garantias no schema
 - **Status:** Aprovada (2026-11-24)
@@ -99,9 +99,9 @@ Legenda de status: **Proposta** (aguardando aprovação) · **Aprovada** · **Su
 ### D08 — Emulador SQS
 - **Status:** Aprovada (2026-11-24)
 - **Contexto:** §4. Desde 23/03/2026, `localstack/localstack:latest` exige `LOCALSTACK_AUTH_TOKEN`.
-- **Decisão:** **MiniStack** como padrão (open-source, sem conta/token). Endpoint configurável (`SQS_ENDPOINT`) para compatibilidade com LocalStack; fallback documentado para `localstack/localstack:4.4.0` caso o teste de contrato do spike F0 detecte limitação em FIFO/redrive no MiniStack.
+- **Decisão:** **MiniStack** como padrão (open-source, sem conta/token, imagem `ghcr.io/ministackorg/ministack:latest`). Endpoint configurável (`SQS_ENDPOINT`) para compatibilidade com LocalStack; fallback documentado para `public.ecr.aws/localstack/localstack:4.4.0`.
 - **Alternativas descartadas:** LocalStack `4.4.0` como padrão; LocalStack atual exigindo token.
-- **Consequências:** setup sem atrito para o avaliador (`docker compose up` sem credenciais). Risco de diferenças de semântica mitigado pelo teste de contrato do emulador na F0.
+- **Consequências:** setup sem atrito para o avaliador (`docker compose up` sem credenciais nem rate-limit do Docker Hub). **Validado na F0:** FIFO, `ChangeMessageVisibility`, `ApproximateReceiveCount` e `RedrivePolicy` para DLQ passaram no teste de contrato.
 
 ### D09 — Outbox com múltiplos publishers
 - **Status:** Aprovada (2026-11-24)

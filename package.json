@@ -1,0 +1,44 @@
+{
+  "name": "distributed-wagering-processor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "start:dev": "bun --watch src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "db:migrate": "bun run src/database/migrate.ts up",
+    "db:rollback": "bun run src/database/migrate.ts down",
+    "sqs:init": "bun run infra/sqs/init-queues.ts",
+    "test": "bun test",
+    "test:unit": "bun test test/unit",
+    "test:integration": "bun test test/integration",
+    "test:concurrency": "bun test test/concurrency"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.700.0",
+    "@mikro-orm/core": "^7.0.0",
+    "@mikro-orm/migrations": "^7.0.0",
+    "@mikro-orm/nestjs": "^7.0.0",
+    "@mikro-orm/postgresql": "^7.0.0",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "pg": "^8.13.0",
+    "pino": "^9.6.0",
+    "prom-client": "^15.1.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/bun": "^1.2.0",
+    "@types/pg": "^8.11.10",
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.24.0"
+  }
+}

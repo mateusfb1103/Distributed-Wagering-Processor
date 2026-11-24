@@ -2,7 +2,32 @@
 
 Serviço financeiro distribuído para processamento de transações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) recebidas de múltiplos provedores via HTTP e AWS SQS, construído com **Bun**, **TypeScript** (estrito), **NestJS**, **MikroORM** e **PostgreSQL**.
 
-> **Status do projeto:** planejamento e decisões arquiteturais concluídos (ver [ARCHITECTURE.md](./ARCHITECTURE.md)). Setup local e comandos de execução/teste serão adicionados a partir da Fase 0.
+> **Status do projeto:** Fase 0 (spike de compatibilidade e fundação) concluída na branch `fase-0/spike-fundacao`.
+
+## Setup local e comandos
+
+Pré-requisitos: **Bun 1.x** e **Docker** (com Docker Compose).
+
+```bash
+# 1. Instalar dependências
+bun install
+
+# 2. Subir PostgreSQL 17 (com roles dwp_migrator / dwp_app) e MiniStack (SQS)
+docker compose up -d --wait
+
+# 3. Inicializar filas SQS FIFO (principal com RedrivePolicy, DLQ e wagering-events.fifo)
+bun run sqs:init
+
+# 4. Rodar migrations (up / down reversível)
+bun run db:migrate
+bun run db:rollback
+bun run db:migrate
+
+# 5. Verificações e testes
+bun run typecheck
+bun run lint
+bun run test:integration
+```
 
 ---
 
