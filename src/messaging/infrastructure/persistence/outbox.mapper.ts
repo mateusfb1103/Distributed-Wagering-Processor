@@ -1,8 +1,8 @@
 import type { OutboxMessageRecord } from "../../../database/entities/outbox-message.entity.ts";
 import type { DomainEvent } from "../../../shared/domain/domain-event.ts";
 
-export function domainEventToOutboxRecord<TPayload extends object>(
-  event: DomainEvent<string, TPayload>,
+export function domainEventToOutboxRecord(
+  event: DomainEvent<string, object>,
   correlationId: string | null,
   now: Date,
 ): OutboxMessageRecord {
