@@ -11,11 +11,13 @@ Serviço financeiro distribuído para processamento de transações de apostas (
 | `GET` | `/health/live` | Liveness probe (`200`) |
 | `GET` | `/health/ready` | Readiness probe verificando PostgreSQL e SQS (`200` / `503`) |
 | `GET` | `/metrics` | Métricas Prometheus (`prom-client`) |
-| `POST` | `/wallets` | Cria carteira (`initialBalance` opcional, padrão `"0.00"`; `201` / `400` / `409`) |
+| `POST` | `/wallets` | Cria carteira (`initialBalance` em objeto `{ amount, currency }` ou string + `currency`; `201` / `400` / `409`) |
 | `GET` | `/wallets/:walletId` | Consulta saldo e versão da carteira (`200` / `404`) |
 | `GET` | `/wallets/:walletId/ledger` | Pagina histórico do razão (`limit` 1..200, `order`, `cursor`; `200` / `404`) |
-| `POST` | `/wager-transactions` | Submete `BET`/`WIN`/`LOSS`/`REFUND`/`ROLLBACK` (`201` novo, `200` replay, `202` `PENDING_REFERENCE`, `422` rejeição/ausência de carteira, `400`/`409`/`503`) |
-| `GET` | `/wager-transactions/:transactionId` | Consulta transação persistida (`200` / `404`) |
+| `POST` | `/wallets/:walletId/reconciliation` | Reconcilia carteira específica (`storedBalance`, `calculatedBalance`, `difference`, `consistent`, `checkedEntries`) |
+| `POST` | `/wagering/transactions` (alias `/wager-transactions`) | Submete `BET`/`WIN`/`LOSS`/`REFUND`/`ROLLBACK` (`201` novo, `200` replay, `202` `PENDING_REFERENCE`, `422` rejeição/ausência de carteira, `400`/`409`/`503`) |
+| `GET` | `/wagering/transactions/:transactionId` (alias `/wager-transactions/:transactionId`) | Consulta transação pelo ID interno (`200` / `404`) |
+| `GET` | `/providers/:providerId/wagering/transactions/:externalTransactionId` | Consulta transação por `(providerId, externalTransactionId)` (`200` / `404`) |
 | `POST` | `/reconciliation/run` | Verifica invariante `wallet.balance == Σ ledger` (global ou `{ walletId }`) |
 
 ## Mensageria SQS FIFO e Papéis (`APP_ROLES`)

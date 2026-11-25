@@ -237,10 +237,19 @@ export class OutboxPublisherService
   private async refreshPendingGauge(): Promise<void> {
     try {
       const em = this.orm.em.fork() as EntityManager;
-      const rows = await em.execute<{ count: string }[]>(
-        `SELECT count(*)::text AS count FROM outbox_messages WHERE published_at IS NULL`,
+      const rows = await em.execute<
+        { count: string; oldest_age_seconds: string | null }[]
+      >(
+        `SELECT
+           count(*)::text AS count,
+           EXTRACT(EPOCH FROM (now() - MIN(created_at)))::text AS oldest_age_seconds
+         FROM outbox_messages
+         WHERE published_at IS NULL`,
       );
       this.metrics.outboxPendingGauge.set(Number(rows[0]?.count ?? "0"));
+      this.metrics.outboxOldestPendingAgeSeconds.set(
+        Number(rows[0]?.oldest_age_seconds ?? "0"),
+      );
     } catch {
       // Métrica auxiliar: não interrompe publicação
     }

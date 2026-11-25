@@ -76,10 +76,12 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
     pendingWorker = app.get(PendingReferenceWorkerService);
 
     const urls = await sqs.getQueueUrls();
-    await drainQueue(sqs, urls.wagerQueueUrl);
-    await drainQueue(sqs, urls.wagerDlqUrl);
-    await drainQueue(sqs, urls.eventsQueueUrl);
-  });
+    await Promise.all([
+      drainQueue(sqs, urls.wagerQueueUrl),
+      drainQueue(sqs, urls.wagerDlqUrl),
+      drainQueue(sqs, urls.eventsQueueUrl),
+    ]);
+  }, 60_000);
 
   afterAll(async () => {
     await app?.close();
@@ -156,7 +158,7 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
     expect(rec.json.discrepancies).toEqual([]);
   });
 
-  test("2. Corrida de idempotência (D02): 10 requisições simultâneas com mesma key", async () => {
+  test("2. Corrida de idempotência (§13.1): mesma aposta enviada 50 vezes em paralelo", async () => {
     const playerId = `player-conc-2-${Bun.randomUUIDv7()}`;
     const created = await postJson("/wallets", {
       playerId,
@@ -178,8 +180,8 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
     const idemKey = `idem-race-${walletId}`;
 
     const results = await Promise.all(
-      Array.from({ length: 10 }, () =>
-        postJson("/wager-transactions", payload, {
+      Array.from({ length: 50 }, () =>
+        postJson("/wagering/transactions", payload, {
           "Idempotency-Key": idemKey,
         }),
       ),
@@ -188,7 +190,7 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
     const statuses201 = results.filter((r) => r.status === 201);
     const statuses200 = results.filter((r) => r.status === 200);
     expect(statuses201).toHaveLength(1);
-    expect(statuses200).toHaveLength(9);
+    expect(statuses200).toHaveLength(49);
 
     const txIds = new Set(results.map((r) => r.json.transactionId as string));
     expect(txIds.size).toBe(1);
@@ -444,13 +446,13 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
       ((await wAfterRedelivery.json()) as { balance: string }).balance,
     ).toBe("70.00");
 
-    // Outbox publica evento exatamente uma vez
+    // Outbox publica eventos da transação (WagerTransactionProcessed + WalletBalanceChanged)
     await em.execute(
       `UPDATE outbox_messages SET published_at = now() WHERE aggregate_id <> ? AND published_at IS NULL`,
       [walletId],
     );
     const outboxRes = await outboxPublisher.runOnce();
-    expect(outboxRes.published).toBe(1);
+    expect(outboxRes.published).toBe(2);
 
     const events = await drainQueue(sqs, urls.eventsQueueUrl);
     expect(events.some((m) => m.Body?.includes(walletId))).toBe(true);
@@ -466,5 +468,82 @@ describe("Fase 5 — Concorrência, Resiliência e Regressão End-to-End", () =>
     await sqsConsumer.stop();
     await pendingWorker.stop();
     await outboxPublisher.stop();
+  });
+
+  test("7. Múltiplas instâncias (3 instâncias NestJS simultâneas) e reinício mantendo consistência (§13.4 e §13.8)", async () => {
+    const instances = await Promise.all(
+      [0, 1, 2].map(async () => {
+        const inst = await NestFactory.create(AppModule, { logger: false });
+        await inst.listen(0);
+        const addr = inst.getHttpServer().address();
+        if (!addr || typeof addr === "string") {
+          throw new Error("Invalid port");
+        }
+        return { inst, url: `http://127.0.0.1:${addr.port}` };
+      }),
+    );
+
+    try {
+      const playerId = `player-3inst-${Bun.randomUUIDv7()}`;
+      const createRes = await fetch(`${instances[0]!.url}/wallets`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          playerId,
+          initialBalance: { amount: "100.00", currency: "BRL" },
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const walletId = ((await createRes.json()) as { id: string }).id;
+
+      // Cenário §8 distribuído entre 3 instâncias simultâneas: 2 BETs de 80.00 + 1 BET de 80.00
+      const responses = await Promise.all(
+        instances.map((target, idx) =>
+          fetch(`${target.url}/wagering/transactions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "Idempotency-Key": `idem-3inst-${walletId}-${idx}`,
+            },
+            body: JSON.stringify({
+              providerId: "prov-3inst",
+              externalTransactionId: `ext-3inst-${walletId}-${idx}`,
+              playerId,
+              walletId,
+              roundId: `r-3inst-${idx}`,
+              gameId: "slot-3inst",
+              kind: "BET",
+              money: { amount: "80.00", currency: "BRL" },
+            }),
+          }),
+        ),
+      );
+
+      const statuses = responses.map((r) => r.status);
+      expect(statuses.filter((s) => s === 201)).toHaveLength(1);
+      expect(statuses.filter((s) => s === 422)).toHaveLength(2);
+    } finally {
+      await Promise.all(instances.map((i) => i.inst.close()));
+    }
+
+    // Reinício simulado: nova instância consulta reconciliação global
+    const restarted = await NestFactory.create(AppModule, { logger: false });
+    try {
+      await restarted.listen(0);
+      const addr = restarted.getHttpServer().address();
+      if (!addr || typeof addr === "string") {
+        throw new Error("Invalid port");
+      }
+      const recRes = await fetch(`http://127.0.0.1:${addr.port}/reconciliation/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(recRes.status).toBe(200);
+      const recJson = (await recRes.json()) as { consistent: boolean };
+      expect(recJson.consistent).toBe(true);
+    } finally {
+      await restarted.close();
+    }
   });
 });

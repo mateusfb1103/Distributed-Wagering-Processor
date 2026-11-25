@@ -8,6 +8,7 @@ import {
   buildWagerPendingReferenceEvent,
   buildWagerProcessedEvent,
   buildWagerRejectedEvent,
+  buildWalletBalanceChangedEvent,
   type WagerDomainEvent,
 } from "./wager-events.ts";
 import {
@@ -94,7 +95,8 @@ function validateReversalReference(params: {
   if (
     params.kind === "ROLLBACK" &&
     reference.kind !== "BET" &&
-    reference.kind !== "WIN"
+    reference.kind !== "WIN" &&
+    reference.kind !== "REFUND"
   ) {
     return "REFERENCE_KIND_NOT_ALLOWED";
   }
@@ -214,10 +216,18 @@ export function processNewWagerTransaction(
       resultWalletVersion: wallet.version,
       now,
     });
+    const events: WagerDomainEvent[] = [
+      buildWagerProcessedEvent(idGenerator.nextId(), tx, now),
+    ];
+    if (ledgerEntry !== null) {
+      events.push(
+        buildWalletBalanceChangedEvent(idGenerator.nextId(), ledgerEntry, now),
+      );
+    }
     return {
       transaction: tx,
       ledgerEntry,
-      events: [buildWagerProcessedEvent(idGenerator.nextId(), tx, now)],
+      events,
     };
   };
 
@@ -444,6 +454,13 @@ export function retryPendingWagerTransaction(
   return {
     transaction: tx,
     ledgerEntry: applied.ledgerEntry,
-    events: [buildWagerProcessedEvent(idGenerator.nextId(), tx, now)],
+    events: [
+      buildWagerProcessedEvent(idGenerator.nextId(), tx, now),
+      buildWalletBalanceChangedEvent(
+        idGenerator.nextId(),
+        applied.ledgerEntry,
+        now,
+      ),
+    ],
   };
 }

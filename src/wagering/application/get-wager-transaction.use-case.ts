@@ -27,4 +27,26 @@ export class GetWagerTransactionUseCase {
       throw error;
     }
   }
+
+  async findByExternalId(
+    providerId: string,
+    externalTransactionId: string,
+  ): Promise<WagerTransaction | null> {
+    const em = this.orm.em.fork() as EntityManager;
+    try {
+      const record = await em.findOne(WagerTransactionSchema, {
+        providerId,
+        externalTransactionId,
+      });
+      return record ? wagerTransactionToDomain(record) : null;
+    } catch (error) {
+      if (isPgUnavailableError(error)) {
+        throw new TransientServiceException(
+          "DATABASE_UNAVAILABLE",
+          "Database is temporarily unavailable.",
+        );
+      }
+      throw error;
+    }
+  }
 }

@@ -1,5 +1,9 @@
-import type { DomainEvent } from "../../shared/domain/domain-event.ts";
 import type { FailureCode } from "../../shared/domain/failure-codes.ts";
+import {
+  IntegrationEvent,
+  type IntegrationEventProps,
+} from "../../shared/domain/integration-event.ts";
+import type { LedgerDirection, WalletLedgerEntry } from "../../wallet/domain/wallet-ledger-entry.ts";
 import type { WagerTransaction } from "./wager-transaction.ts";
 import type { WagerTransactionKind } from "./wager-transaction.types.ts";
 
@@ -50,38 +54,103 @@ export interface WagerTransactionPendingReferencePayload {
   readonly expiresAt: string;
 }
 
-export type WagerTransactionProcessedEvent = DomainEvent<
-  "WagerTransactionProcessed",
-  WagerTransactionProcessedPayload
->;
+export interface WalletBalanceChangedPayload {
+  readonly walletId: string;
+  readonly transactionId: string;
+  readonly direction: LedgerDirection;
+  readonly money: { readonly amount: string; readonly currency: string };
+  readonly balanceBefore: { readonly amount: string; readonly currency: string };
+  readonly balanceAfter: { readonly amount: string; readonly currency: string };
+  readonly walletVersion: number;
+}
 
-export type WagerTransactionRejectedEvent = DomainEvent<
-  "WagerTransactionRejected",
-  WagerTransactionRejectedPayload
->;
+export class WagerTransactionProcessedEvent extends IntegrationEvent<WagerTransactionProcessedPayload> {
+  readonly eventType = "WagerTransactionProcessed" as const;
+  readonly version = 1;
 
-export type WagerTransactionPendingReferenceEvent = DomainEvent<
-  "WagerTransactionPendingReference",
-  WagerTransactionPendingReferencePayload
->;
+  static create(
+    props: Omit<
+      IntegrationEventProps<WagerTransactionProcessedPayload>,
+      "aggregateType"
+    >,
+  ): WagerTransactionProcessedEvent {
+    return new WagerTransactionProcessedEvent({
+      ...props,
+      aggregateType: "WagerTransaction",
+    });
+  }
+}
+
+export class WagerTransactionRejectedEvent extends IntegrationEvent<WagerTransactionRejectedPayload> {
+  readonly eventType = "WagerTransactionRejected" as const;
+  readonly version = 1;
+
+  static create(
+    props: Omit<
+      IntegrationEventProps<WagerTransactionRejectedPayload>,
+      "aggregateType"
+    >,
+  ): WagerTransactionRejectedEvent {
+    return new WagerTransactionRejectedEvent({
+      ...props,
+      aggregateType: "WagerTransaction",
+    });
+  }
+}
+
+export class WagerTransactionPendingReferenceEvent extends IntegrationEvent<WagerTransactionPendingReferencePayload> {
+  readonly eventType = "WagerTransactionPendingReference" as const;
+  readonly version = 1;
+
+  static create(
+    props: Omit<
+      IntegrationEventProps<WagerTransactionPendingReferencePayload>,
+      "aggregateType"
+    >,
+  ): WagerTransactionPendingReferenceEvent {
+    return new WagerTransactionPendingReferenceEvent({
+      ...props,
+      aggregateType: "WagerTransaction",
+    });
+  }
+}
+
+export class WalletBalanceChangedEvent extends IntegrationEvent<WalletBalanceChangedPayload> {
+  readonly eventType = "WalletBalanceChanged" as const;
+  readonly version = 1;
+
+  static create(
+    props: Omit<
+      IntegrationEventProps<WalletBalanceChangedPayload>,
+      "aggregateType"
+    >,
+  ): WalletBalanceChangedEvent {
+    return new WalletBalanceChangedEvent({
+      ...props,
+      aggregateType: "Wallet",
+    });
+  }
+}
 
 export type WagerDomainEvent =
   | WagerTransactionProcessedEvent
   | WagerTransactionRejectedEvent
-  | WagerTransactionPendingReferenceEvent;
+  | WagerTransactionPendingReferenceEvent
+  | WalletBalanceChangedEvent;
 
 export function buildWagerProcessedEvent(
   eventId: string,
   tx: WagerTransaction,
   occurredAt: Date,
+  correlationId = "",
 ): WagerTransactionProcessedEvent {
-  return {
+  return WagerTransactionProcessedEvent.create({
     eventId,
-    eventType: "WagerTransactionProcessed",
-    aggregateType: "WagerTransaction",
     aggregateId: tx.walletId,
+    correlationId,
+    causationId: tx.id,
     occurredAt,
-    payload: {
+    data: {
       transactionId: tx.id,
       providerId: tx.providerId,
       externalTransactionId: tx.externalTransactionId,
@@ -97,21 +166,22 @@ export function buildWagerProcessedEvent(
       walletVersion: tx.resultWalletVersion!,
       processedAt: (tx.processedAt ?? occurredAt).toISOString(),
     },
-  };
+  });
 }
 
 export function buildWagerRejectedEvent(
   eventId: string,
   tx: WagerTransaction,
   occurredAt: Date,
+  correlationId = "",
 ): WagerTransactionRejectedEvent {
-  return {
+  return WagerTransactionRejectedEvent.create({
     eventId,
-    eventType: "WagerTransactionRejected",
-    aggregateType: "WagerTransaction",
     aggregateId: tx.walletId,
+    correlationId,
+    causationId: tx.id,
     occurredAt,
-    payload: {
+    data: {
       transactionId: tx.id,
       providerId: tx.providerId,
       externalTransactionId: tx.externalTransactionId,
@@ -126,21 +196,22 @@ export function buildWagerRejectedEvent(
       walletVersion: tx.resultWalletVersion,
       rejectedAt: occurredAt.toISOString(),
     },
-  };
+  });
 }
 
 export function buildWagerPendingReferenceEvent(
   eventId: string,
   tx: WagerTransaction,
   occurredAt: Date,
+  correlationId = "",
 ): WagerTransactionPendingReferenceEvent {
-  return {
+  return WagerTransactionPendingReferenceEvent.create({
     eventId,
-    eventType: "WagerTransactionPendingReference",
-    aggregateType: "WagerTransaction",
     aggregateId: tx.walletId,
+    correlationId,
+    causationId: tx.id,
     occurredAt,
-    payload: {
+    data: {
       transactionId: tx.id,
       providerId: tx.providerId,
       externalTransactionId: tx.externalTransactionId,
@@ -153,5 +224,29 @@ export function buildWagerPendingReferenceEvent(
       referenceExternalTransactionId: tx.referenceExternalTransactionId!,
       expiresAt: tx.expiresAt!.toISOString(),
     },
-  };
+  });
+}
+
+export function buildWalletBalanceChangedEvent(
+  eventId: string,
+  entry: WalletLedgerEntry,
+  occurredAt: Date,
+  correlationId = "",
+): WalletBalanceChangedEvent {
+  return WalletBalanceChangedEvent.create({
+    eventId,
+    aggregateId: entry.walletId,
+    correlationId,
+    causationId: entry.transactionId,
+    occurredAt,
+    data: {
+      walletId: entry.walletId,
+      transactionId: entry.transactionId,
+      direction: entry.direction,
+      money: entry.amount.toJSON(),
+      balanceBefore: entry.balanceBefore.toJSON(),
+      balanceAfter: entry.balanceAfter.toJSON(),
+      walletVersion: entry.walletVersion,
+    },
+  });
 }

@@ -549,4 +549,86 @@ describe("WagerProcessor & WagerTransaction rules", () => {
     expect(opening.status).toBe("PROCESSED");
     expect(opening.resultBalance?.toString()).toBe("50.00");
   });
+
+  test("ROLLBACK over REFUND debits credited amount (§7 rule 3) and WalletBalanceChanged is emitted only when balance changes (§11)", () => {
+    const idGen = new SequenceIdGenerator();
+    const wallet = makeWallet("100.00");
+
+    const betOutcome = processNewWagerTransaction({
+      command: makeCommand({
+        kind: "BET",
+        amount: "30.00",
+        externalTransactionId: "ext-b-1",
+      }),
+      wallet,
+      referenceTransaction: null,
+      isReferenceAlreadyReversed: false,
+      pendingReferenceTtlMs: ttlMs,
+      now,
+      idGenerator: idGen,
+    });
+    expect(betOutcome.events.map((e) => e.eventType)).toEqual([
+      "WagerTransactionProcessed",
+      "WalletBalanceChanged",
+    ]);
+
+    const lossOutcome = processNewWagerTransaction({
+      command: makeCommand({
+        kind: "LOSS",
+        amount: "0.00",
+        externalTransactionId: "ext-l-1",
+        idempotencyKey: "idem-l-1",
+      }),
+      wallet,
+      referenceTransaction: null,
+      isReferenceAlreadyReversed: false,
+      pendingReferenceTtlMs: ttlMs,
+      now,
+      idGenerator: idGen,
+    });
+    expect(lossOutcome.events.map((e) => e.eventType)).toEqual([
+      "WagerTransactionProcessed",
+    ]);
+
+    const refundOutcome = processNewWagerTransaction({
+      command: makeCommand({
+        kind: "REFUND",
+        amount: "30.00",
+        externalTransactionId: "ext-r-1",
+        idempotencyKey: "idem-r-1",
+        referenceExternalTransactionId: "ext-b-1",
+      }),
+      wallet,
+      referenceTransaction: betOutcome.transaction,
+      isReferenceAlreadyReversed: false,
+      pendingReferenceTtlMs: ttlMs,
+      now,
+      idGenerator: idGen,
+    });
+    expect(refundOutcome.transaction.status).toBe("PROCESSED");
+    expect(wallet.balance.toString()).toBe("100.00");
+
+    const rollbackRefund = processNewWagerTransaction({
+      command: makeCommand({
+        kind: "ROLLBACK",
+        amount: "30.00",
+        externalTransactionId: "ext-rb-r-1",
+        idempotencyKey: "idem-rb-r-1",
+        referenceExternalTransactionId: "ext-r-1",
+      }),
+      wallet,
+      referenceTransaction: refundOutcome.transaction,
+      isReferenceAlreadyReversed: false,
+      pendingReferenceTtlMs: ttlMs,
+      now,
+      idGenerator: idGen,
+    });
+    expect(rollbackRefund.transaction.status).toBe("PROCESSED");
+    expect(rollbackRefund.ledgerEntry?.direction).toBe("DEBIT");
+    expect(wallet.balance.toString()).toBe("70.00");
+    expect(rollbackRefund.events.map((e) => e.eventType)).toEqual([
+      "WagerTransactionProcessed",
+      "WalletBalanceChanged",
+    ]);
+  });
 });
