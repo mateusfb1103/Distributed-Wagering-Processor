@@ -341,4 +341,58 @@ describe("Fase 3 — API HTTP, Casos de Uso e Reconciliação", () => {
     expect(recAll.status).toBe(200);
     expect(recAll.json.consistent).toBe(true);
   });
+
+  test("Rotas oficiais do enunciado (§9): POST /wallets com initialBalance objeto, /wagering/transactions, /providers/:p/wagering/transactions/:ext e /wallets/:id/reconciliation", async () => {
+    const playerId = `player-spec-${Bun.randomUUIDv7()}`;
+    const walletCreated = await postJson("/wallets", {
+      playerId,
+      initialBalance: { amount: "100.00", currency: "BRL" },
+    });
+    expect(walletCreated.status).toBe(201);
+    expect(walletCreated.json.money).toEqual({
+      amount: "100.00",
+      currency: "BRL",
+    });
+    const walletId = walletCreated.json.id as string;
+
+    const betExtId = `ext-spec-bet-${walletId}`;
+    const betRes = await postJson(
+      "/wagering/transactions",
+      {
+        providerId: "provider-spec",
+        externalTransactionId: betExtId,
+        playerId,
+        walletId,
+        roundId: "round-spec",
+        gameId: "fortune-chimp",
+        kind: "BET",
+        money: { amount: "25.00", currency: "BRL" },
+      },
+      { "Idempotency-Key": `provider-spec:${betExtId}` },
+    );
+    expect(betRes.status).toBe(201);
+    const txId = betRes.json.transactionId as string;
+
+    const byId = await fetch(`${baseUrl}/wagering/transactions/${txId}`);
+    expect(byId.status).toBe(200);
+
+    const byExt = await fetch(
+      `${baseUrl}/providers/provider-spec/wagering/transactions/${betExtId}`,
+    );
+    expect(byExt.status).toBe(200);
+    expect(((await byExt.json()) as { transactionId: string }).transactionId).toBe(
+      txId,
+    );
+
+    const recSingle = await postJson(`/wallets/${walletId}/reconciliation`, {});
+    expect(recSingle.status).toBe(200);
+    expect(recSingle.json).toEqual({
+      walletId,
+      storedBalance: { amount: "75.00", currency: "BRL" },
+      calculatedBalance: { amount: "75.00", currency: "BRL" },
+      difference: { amount: "0.00", currency: "BRL" },
+      consistent: true,
+      checkedEntries: 2,
+    });
+  });
 });

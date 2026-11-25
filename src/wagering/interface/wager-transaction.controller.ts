@@ -10,16 +10,16 @@ import {
   Res,
 } from "@nestjs/common";
 import { z } from "zod";
-
-interface HttpStatusResponse {
-  status(code: number): unknown;
-}
 import { ContractViolationError } from "../../shared/domain/domain-error.ts";
 import { ResourceNotFoundException } from "../../shared/infrastructure/http/http-exception.filter.ts";
 import { parseWithZod } from "../../shared/infrastructure/http/zod-validation.ts";
 import { GetWagerTransactionUseCase } from "../application/get-wager-transaction.use-case.ts";
 import { SubmitWagerTransactionUseCase } from "../application/submit-wager-transaction.use-case.ts";
 import type { WagerTransaction } from "../domain/wager-transaction.ts";
+
+interface HttpStatusResponse {
+  status(code: number): unknown;
+}
 
 const submitWagerBodySchema = z
   .object({
@@ -89,7 +89,7 @@ function serializeTransaction(
   };
 }
 
-@Controller("wager-transactions")
+@Controller(["wager-transactions", "wagering/transactions"])
 export class WagerTransactionController {
   constructor(
     @Inject(SubmitWagerTransactionUseCase)
@@ -159,6 +159,32 @@ export class WagerTransactionController {
       throw new ResourceNotFoundException(
         `WagerTransaction ${transactionId} not found.`,
         { transactionId },
+      );
+    }
+    return serializeTransaction(tx);
+  }
+}
+
+@Controller("providers")
+export class ProviderWagerTransactionController {
+  constructor(
+    @Inject(GetWagerTransactionUseCase)
+    private readonly getWager: GetWagerTransactionUseCase,
+  ) {}
+
+  @Get(":providerId/wagering/transactions/:externalTransactionId")
+  async findByExternal(
+    @Param("providerId") providerId: string,
+    @Param("externalTransactionId") externalTransactionId: string,
+  ) {
+    const tx = await this.getWager.findByExternalId(
+      providerId,
+      externalTransactionId,
+    );
+    if (!tx) {
+      throw new ResourceNotFoundException(
+        `WagerTransaction ${externalTransactionId} for provider ${providerId} not found.`,
+        { providerId, externalTransactionId },
       );
     }
     return serializeTransaction(tx);

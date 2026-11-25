@@ -123,17 +123,20 @@ describe("Fase 4 — Outbox Publisher, Consumer SQS e PendingReferenceWorker", (
       outboxPublisher.runOnce({ instanceIdOverride: "pub-2" }),
     ]);
 
-    expect(r1.published + r2.published).toBe(1);
+    // BET gera 2 eventos na outbox: WagerTransactionProcessed + WalletBalanceChanged (§11)
+    expect(r1.published + r2.published).toBe(2);
     expect(r1.failed + r2.failed).toBe(0);
 
     const events = await drainQueue(sqs, urls.eventsQueueUrl);
     const matching = events.filter((m) =>
       m.Body?.includes(submitted.transaction.id),
     );
-    expect(matching).toHaveLength(1);
-    expect(matching[0]?.MessageAttributes?.eventType?.StringValue).toBe(
-      "WagerTransactionProcessed",
+    expect(matching).toHaveLength(2);
+    const eventTypes = matching.map(
+      (m) => m.MessageAttributes?.eventType?.StringValue,
     );
+    expect(eventTypes).toContain("WagerTransactionProcessed");
+    expect(eventTypes).toContain("WalletBalanceChanged");
 
     // Testa recuperação de lease expirado de um publisher morto
     const expiredEventId = Bun.randomUUIDv7();
@@ -404,5 +407,49 @@ describe("Fase 4 — Outbox Publisher, Consumer SQS e PendingReferenceWorker", (
       status: "REJECTED",
       failure_code: "REFERENCE_NOT_FOUND",
     });
+  });
+
+  test("Consumer SQS aceita envelope oficial da §10 com objeto `data`", async () => {
+    const urls = await sqs.getQueueUrls();
+    await drainQueue(sqs, urls.wagerQueueUrl);
+
+    const playerId = `player-env-data-${Bun.randomUUIDv7()}`;
+    const wallet = await createWallet.execute({
+      playerId,
+      initialBalance: "80.00",
+      currency: "BRL",
+    });
+
+    const msgId = Bun.randomUUIDv7();
+    await sqs.client.send(
+      new SendMessageCommand({
+        QueueUrl: urls.wagerQueueUrl,
+        MessageBody: JSON.stringify({
+          messageId: msgId,
+          type: "WagerTransactionRequested",
+          occurredAt: new Date().toISOString(),
+          data: {
+            providerId: "prov-spec-sqs",
+            externalTransactionId: `ext-data-${wallet.id}`,
+            idempotencyKey: `prov-spec-sqs:ext-data-${wallet.id}`,
+            playerId,
+            walletId: wallet.id,
+            roundId: "r-data",
+            gameId: "fortune-chimp",
+            kind: "BET",
+            money: { amount: "25.00", currency: "BRL" },
+          },
+        }),
+        MessageGroupId: wallet.id,
+        MessageDeduplicationId: msgId,
+      }),
+    );
+
+    const poll = await sqsConsumer.pollOnce({ waitTimeSeconds: 1 });
+    expect(poll.acked).toBe(1);
+    expect(poll.dlq).toBe(0);
+    expect((await getWallet.execute(wallet.id))?.balance.toString()).toBe(
+      "55.00",
+    );
   });
 });

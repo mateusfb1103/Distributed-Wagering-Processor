@@ -21,8 +21,11 @@ export class MetricsService {
   readonly outboxPublishedTotal: Counter<"event_type">;
   readonly outboxFailuresTotal: Counter<"event_type">;
   readonly outboxPendingGauge: Gauge<string>;
+  readonly outboxOldestPendingAgeSeconds: Gauge<string>;
   readonly sqsMessagesTotal: Counter<"outcome">;
+  readonly duplicatesDetectedTotal: Counter<"source" | "kind">;
   readonly pendingReferenceResolutionsTotal: Counter<"outcome">;
+  readonly reconciliationDiscrepanciesTotal: Counter<string>;
 
   constructor() {
     collectDefaultMetrics({ register: this.registry });
@@ -68,6 +71,12 @@ export class MetricsService {
       registers: [this.registry],
     });
 
+    this.outboxOldestPendingAgeSeconds = new Gauge({
+      name: "dwp_outbox_oldest_pending_age_seconds",
+      help: "Age in seconds of the oldest unpublished outbox message",
+      registers: [this.registry],
+    });
+
     this.sqsMessagesTotal = new Counter({
       name: "dwp_sqs_messages_total",
       help: "Total SQS consumer messages handled by outcome",
@@ -75,10 +84,23 @@ export class MetricsService {
       registers: [this.registry],
     });
 
+    this.duplicatesDetectedTotal = new Counter({
+      name: "dwp_duplicates_detected_total",
+      help: "Total duplicate transactions or messages detected via idempotency or inbox",
+      labelNames: ["source", "kind"],
+      registers: [this.registry],
+    });
+
     this.pendingReferenceResolutionsTotal = new Counter({
       name: "dwp_pending_reference_resolutions_total",
       help: "Total PENDING_REFERENCE resolution attempts by outcome",
       labelNames: ["outcome"],
+      registers: [this.registry],
+    });
+
+    this.reconciliationDiscrepanciesTotal = new Counter({
+      name: "dwp_reconciliation_discrepancies_total",
+      help: "Total wallet balance or version discrepancies detected during reconciliation",
       registers: [this.registry],
     });
   }

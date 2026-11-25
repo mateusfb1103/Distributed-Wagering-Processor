@@ -28,11 +28,8 @@ import {
 
 const CONSUMER_NAME = "wager-transactions-consumer";
 
-const sqsEnvelopeSchema = z
+const sqsTransactionDataSchema = z
   .object({
-    type: z.string().optional(),
-    messageId: z.string().min(1).optional(),
-    occurredAt: z.string().optional(),
     providerId: z.string().min(1),
     idempotencyKey: z.string().optional(),
     externalTransactionId: z.string().min(1),
@@ -50,6 +47,28 @@ const sqsEnvelopeSchema = z
     referenceExternalTransactionId: z.string().nullable().optional(),
   })
   .strict();
+
+const sqsNestedEnvelopeSchema = z
+  .object({
+    type: z.string().optional(),
+    messageId: z.string().min(1).optional(),
+    occurredAt: z.string().optional(),
+    data: sqsTransactionDataSchema,
+  })
+  .strict();
+
+const sqsFlatEnvelopeSchema = sqsTransactionDataSchema
+  .extend({
+    type: z.string().optional(),
+    messageId: z.string().min(1).optional(),
+    occurredAt: z.string().optional(),
+  })
+  .strict();
+
+const sqsEnvelopeSchema = z.union([
+  sqsNestedEnvelopeSchema,
+  sqsFlatEnvelopeSchema,
+]);
 
 export interface SqsPollResult {
   readonly received: number;
@@ -227,6 +246,7 @@ export class SqsConsumerService
           }
 
           const envelope = parsedResult.data;
+          const payloadData = "data" in envelope ? envelope.data : envelope;
           if (
             envelope.type !== undefined &&
             envelope.type !== "WagerTransactionRequested"
@@ -261,6 +281,10 @@ export class SqsConsumerService
                 await this.sqs.deleteWagerMessage(receiptHandle);
               }
               this.metrics.sqsMessagesTotal.inc({ outcome: "duplicate_ack" });
+              this.metrics.duplicatesDetectedTotal.inc({
+                source: "sqs",
+                kind: "inbox",
+              });
               return "ACK";
             }
           }
@@ -268,7 +292,7 @@ export class SqsConsumerService
           const attrIdemKey =
             msg.MessageAttributes?.idempotencyKey?.StringValue?.trim();
           const idempotencyKey =
-            envelope.idempotencyKey?.trim() || attrIdemKey || "";
+            payloadData.idempotencyKey?.trim() || attrIdemKey || "";
 
           if (idempotencyKey.length === 0) {
             throw new ContractViolationError(
@@ -278,17 +302,17 @@ export class SqsConsumerService
           }
 
           await this.submitWager.execute({
-            providerId: envelope.providerId,
+            providerId: payloadData.providerId,
             idempotencyKey,
-            externalTransactionId: envelope.externalTransactionId,
-            playerId: envelope.playerId,
-            walletId: envelope.walletId,
-            roundId: envelope.roundId,
-            gameId: envelope.gameId,
-            kind: envelope.kind,
-            money: envelope.money,
+            externalTransactionId: payloadData.externalTransactionId,
+            playerId: payloadData.playerId,
+            walletId: payloadData.walletId,
+            roundId: payloadData.roundId,
+            gameId: payloadData.gameId,
+            kind: payloadData.kind,
+            money: payloadData.money,
             referenceExternalTransactionId:
-              envelope.referenceExternalTransactionId,
+              payloadData.referenceExternalTransactionId,
             source: "sqs",
             inboxContext: {
               consumerName: CONSUMER_NAME,

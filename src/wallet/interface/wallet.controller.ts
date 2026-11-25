@@ -10,6 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { z } from "zod";
+import { RunReconciliationUseCase } from "../../reconciliation/application/run-reconciliation.use-case.ts";
 import { ResourceNotFoundException } from "../../shared/infrastructure/http/http-exception.filter.ts";
 import { parseWithZod } from "../../shared/infrastructure/http/zod-validation.ts";
 import { CreateWalletUseCase } from "../application/create-wallet.use-case.ts";
@@ -17,13 +18,26 @@ import { GetWalletUseCase } from "../application/get-wallet.use-case.ts";
 import { ListWalletLedgerUseCase } from "../application/list-wallet-ledger.use-case.ts";
 import type { Wallet } from "../domain/wallet.ts";
 
-const createWalletSchema = z
-  .object({
-    playerId: z.string().min(1),
-    initialBalance: z.string().default("0.00"),
-    currency: z.string(),
-  })
-  .strict();
+const createWalletSchema = z.union([
+  z
+    .object({
+      playerId: z.string().min(1),
+      initialBalance: z
+        .object({
+          amount: z.string(),
+          currency: z.string(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      playerId: z.string().min(1),
+      initialBalance: z.string().default("0.00"),
+      currency: z.string(),
+    })
+    .strict(),
+]);
 
 const listLedgerQuerySchema = z
   .object({
@@ -35,10 +49,12 @@ const listLedgerQuerySchema = z
 
 function serializeWallet(wallet: Wallet) {
   return {
+    id: wallet.id,
     walletId: wallet.id,
     playerId: wallet.playerId,
     currency: wallet.currency,
     balance: wallet.balance.toString(),
+    money: wallet.balance.toJSON(),
     version: wallet.version,
     createdAt: wallet.createdAt.toISOString(),
     updatedAt: wallet.updatedAt.toISOString(),
@@ -53,13 +69,28 @@ export class WalletController {
     @Inject(GetWalletUseCase) private readonly getWallet: GetWalletUseCase,
     @Inject(ListWalletLedgerUseCase)
     private readonly listLedger: ListWalletLedgerUseCase,
+    @Inject(RunReconciliationUseCase)
+    private readonly runReconciliation: RunReconciliationUseCase,
   ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() rawBody: unknown) {
     const body = parseWithZod(createWalletSchema, rawBody);
-    const wallet = await this.createWallet.execute(body);
+    const command =
+      typeof body.initialBalance === "string"
+        ? {
+            playerId: body.playerId,
+            initialBalance: body.initialBalance,
+            currency: (body as { currency: string }).currency,
+          }
+        : {
+            playerId: body.playerId,
+            initialBalance: body.initialBalance.amount,
+            currency: body.initialBalance.currency,
+          };
+
+    const wallet = await this.createWallet.execute(command);
     return serializeWallet(wallet);
   }
 
@@ -107,5 +138,17 @@ export class WalletController {
       })),
       nextCursor: result.nextCursor,
     };
+  }
+
+  @Post(":walletId/reconciliation")
+  @HttpCode(HttpStatus.OK)
+  async reconcile(@Param("walletId") walletId: string) {
+    const report = await this.runReconciliation.reconcileWallet(walletId);
+    if (!report) {
+      throw new ResourceNotFoundException(`Wallet ${walletId} not found.`, {
+        walletId,
+      });
+    }
+    return report;
   }
 }

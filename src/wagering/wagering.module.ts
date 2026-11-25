@@ -3,10 +3,13 @@ import { GetWagerTransactionUseCase } from "./application/get-wager-transaction.
 import { PendingReferenceWorkerService } from "./application/pending-reference-worker.service.ts";
 import { PendingWakeUpRegistry } from "./application/pending-wakeup.registry.ts";
 import { SubmitWagerTransactionUseCase } from "./application/submit-wager-transaction.use-case.ts";
-import { WagerTransactionController } from "./interface/wager-transaction.controller.ts";
+import {
+  ProviderWagerTransactionController,
+  WagerTransactionController,
+} from "./interface/wager-transaction.controller.ts";
 
 @Module({
-  controllers: [WagerTransactionController],
+  controllers: [WagerTransactionController, ProviderWagerTransactionController],
   providers: [
     PendingWakeUpRegistry,
     SubmitWagerTransactionUseCase,

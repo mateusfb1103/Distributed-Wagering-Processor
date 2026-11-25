@@ -153,6 +153,12 @@ export class SubmitWagerTransactionUseCase {
           failureCode: result.transaction.failureCode,
           durationSeconds,
         });
+        if (result.idempotentReplay) {
+          this.metrics.duplicatesDetectedTotal.inc({
+            source,
+            kind: "idempotency",
+          });
+        }
 
         this.logger.info("Wager transaction handled", {
           kind: result.transaction.kind,
