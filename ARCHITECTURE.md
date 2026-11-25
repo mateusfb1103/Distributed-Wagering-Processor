@@ -1,6 +1,6 @@
 # ARCHITECTURE — Distributed Wagering Processor
 
-> **Estado do documento:** decisões D01–D14 aprovadas em 2026-11-24; Fase 0 (spike e fundação) validada.
+> **Estado do documento:** decisões D01–D14 aprovadas em 2026-11-24; Fase 2 (schema PostgreSQL + triggers R-a/R-b/R-c/R-d + entidades MikroORM 7) validada.
 > Decisões convencionais estão na seção 3.
 
 ---

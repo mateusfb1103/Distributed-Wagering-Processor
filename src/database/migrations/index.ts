@@ -1,13 +1,12 @@
 import type { MigrationObject } from "@mikro-orm/core";
-import { Migration00000000000000_SpikeHealthcheck } from "./Migration00000000000000_SpikeHealthcheck.ts";
+import { Migration20261125000001_CreateCoreSchema } from "./Migration20261125000001_CreateCoreSchema.ts";
 
 /**
- * Registro estático de migrations para evitar problemas de import dinâmico
- * do Migrator sob Bun (ver risco documentado no PLANO.md — F0).
+ * Registro estático de migrations para evitar import dinâmico do Migrator sob Bun.
  */
 export const migrationsList: MigrationObject[] = [
   {
-    name: "Migration00000000000000_SpikeHealthcheck",
-    class: Migration00000000000000_SpikeHealthcheck,
+    name: "Migration20261125000001_CreateCoreSchema",
+    class: Migration20261125000001_CreateCoreSchema,
   },
 ];

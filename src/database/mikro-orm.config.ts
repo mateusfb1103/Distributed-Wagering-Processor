@@ -1,6 +1,10 @@
 import { defineConfig, type Options } from "@mikro-orm/postgresql";
 import { Migrator } from "@mikro-orm/migrations";
-import { SpikeProbeSchema } from "./entities/spike-probe.entity.ts";
+import { InboxMessageSchema } from "./entities/inbox-message.entity.ts";
+import { OutboxMessageSchema } from "./entities/outbox-message.entity.ts";
+import { WagerTransactionSchema } from "./entities/wager-transaction.entity.ts";
+import { WalletLedgerEntrySchema } from "./entities/wallet-ledger-entry.entity.ts";
+import { WalletSchema } from "./entities/wallet.entity.ts";
 import { migrationsList } from "./migrations/index.ts";
 import { loadEnv } from "../shared/infrastructure/config/env.ts";
 
@@ -15,7 +19,13 @@ export function buildMikroOrmConfig(
 
   return defineConfig({
     clientUrl,
-    entities: [SpikeProbeSchema],
+    entities: [
+      WalletSchema,
+      WagerTransactionSchema,
+      WalletLedgerEntrySchema,
+      InboxMessageSchema,
+      OutboxMessageSchema,
+    ],
     extensions: [Migrator],
     migrations: {
       tableName: "mikro_orm_migrations",
