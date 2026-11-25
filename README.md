@@ -2,7 +2,7 @@
 
 Serviço financeiro distribuído para processamento de transações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) recebidas de múltiplos provedores via HTTP e AWS SQS, construído com **Bun**, **TypeScript** (estrito), **NestJS**, **MikroORM** e **PostgreSQL**.
 
-> **Status do projeto:** Fase 3 (observabilidade, casos de uso D01/D02/D11, API HTTP D07/D13 e reconciliação) concluída na branch `fase-3/api-casos-de-uso`.
+> **Status do projeto:** Fase 4 (Outbox Publisher D09, Consumer SQS D10, Pending Reference Worker D11 e `APP_ROLES`) concluída na branch `fase-4/mensageria-workers`.
 
 ## Endpoints HTTP
 
