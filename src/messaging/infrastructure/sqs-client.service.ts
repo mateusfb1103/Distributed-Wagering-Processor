@@ -114,8 +114,16 @@ export class SqsClientService implements OnModuleDestroy {
   async receiveWagerMessages(params: {
     readonly maxNumberOfMessages: number;
     readonly waitTimeSeconds: number;
+    readonly abortSignal?: AbortSignal;
   }): Promise<Message[]> {
     const { wagerQueueUrl } = await this.getQueueUrls();
+    const timeoutSignal = AbortSignal.timeout(
+      (params.waitTimeSeconds + 5) * 1000,
+    );
+    const signal = params.abortSignal
+      ? AbortSignal.any([timeoutSignal, params.abortSignal])
+      : timeoutSignal;
+
     const res = await this.client.send(
       new ReceiveMessageCommand({
         QueueUrl: wagerQueueUrl,
@@ -124,11 +132,7 @@ export class SqsClientService implements OnModuleDestroy {
         MessageAttributeNames: ["All"],
         MessageSystemAttributeNames: ["ApproximateReceiveCount"],
       }),
-      {
-        abortSignal: AbortSignal.timeout(
-          (params.waitTimeSeconds + 5) * 1000,
-        ),
-      },
+      { abortSignal: signal },
     );
     return res.Messages ?? [];
   }

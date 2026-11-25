@@ -1,6 +1,6 @@
 # ARCHITECTURE — Distributed Wagering Processor
 
-> **Estado do documento:** decisões D01–D14 aprovadas em 2026-11-24; Fase 4 (Outbox Publisher D09, Consumer SQS D10 e Pending Reference Worker D11) validada.
+> **Estado do documento:** decisões D01–D14 aprovadas em 2026-11-24; **implementação completa (Fases 0–5)** validada com testes unitários, integração e concorrência/resiliência.
 > Decisões convencionais estão na seção 3.
 
 ---
