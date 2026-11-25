@@ -2,7 +2,7 @@
 
 Serviço financeiro distribuído para processamento de transações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) recebidas de múltiplos provedores via HTTP e AWS SQS, construído com **Bun**, **TypeScript** (estrito), **NestJS**, **MikroORM** e **PostgreSQL**.
 
-> **Status do projeto:** Fase 0 (spike de compatibilidade e fundação) concluída na branch `fase-0/spike-fundacao`.
+> **Status do projeto:** Fase 1 (domínio puro e testes unitários) concluída na branch `fase-1/dominio-puro`.
 
 ## Setup local e comandos
 
