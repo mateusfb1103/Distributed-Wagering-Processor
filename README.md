@@ -2,7 +2,21 @@
 
 Serviço financeiro distribuído para processamento de transações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) recebidas de múltiplos provedores via HTTP e AWS SQS, construído com **Bun**, **TypeScript** (estrito), **NestJS**, **MikroORM** e **PostgreSQL**.
 
-> **Status do projeto:** Fase 2 (schema PostgreSQL, triggers de invariantes, entidades MikroORM 7 e mappers) concluída na branch `fase-2/persistencia-schema`.
+> **Status do projeto:** Fase 3 (observabilidade, casos de uso D01/D02/D11, API HTTP D07/D13 e reconciliação) concluída na branch `fase-3/api-casos-de-uso`.
+
+## Endpoints HTTP
+
+| Método | Caminho | Descrição |
+|---|---|---|
+| `GET` | `/health/live` | Liveness probe (`200`) |
+| `GET` | `/health/ready` | Readiness probe verificando PostgreSQL e SQS (`200` / `503`) |
+| `GET` | `/metrics` | Métricas Prometheus (`prom-client`) |
+| `POST` | `/wallets` | Cria carteira (`initialBalance` opcional, padrão `"0.00"`) |
+| `GET` | `/wallets/:walletId` | Consulta saldo e versão da carteira |
+| `GET` | `/wallets/:walletId/ledger` | Pagina histórico do razão (`limit` 1..200, `order`, `cursor`) |
+| `POST` | `/wager-transactions` | Submete `BET`/`WIN`/`LOSS`/`REFUND`/`ROLLBACK` (`201` novo, `200` replay, `202` `PENDING_REFERENCE`, `422` rejeição/ausência de carteira, `400`/`409`/`503`) |
+| `GET` | `/wager-transactions/:transactionId` | Consulta transação persistida |
+| `POST` | `/reconciliation/run` | Verifica invariante `wallet.balance == Σ ledger` (global ou `{ walletId }`) |
 
 ## Setup local e comandos
 
