@@ -71,6 +71,7 @@ export class SqsConsumerService
   private running = false;
   private shuttingDown = false;
   private loopPromise: Promise<void> | null = null;
+  private receiveAbortController: AbortController | null = null;
   private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
@@ -108,6 +109,7 @@ export class SqsConsumerService
   async stop(): Promise<void> {
     this.running = false;
     this.shuttingDown = true;
+    this.receiveAbortController?.abort();
 
     const timeoutMs = loadEnv().SHUTDOWN_TIMEOUT_MS;
     const waitInFlight = Promise.allSettled(Array.from(this.inFlight));
@@ -129,12 +131,22 @@ export class SqsConsumerService
     readonly waitTimeSeconds?: number;
     readonly maxMessages?: number;
     readonly faultInjectionOverride?: string | null;
+    readonly abortSignal?: AbortSignal;
   }): Promise<SqsPollResult> {
     const env = loadEnv();
-    const messages = await this.sqs.receiveWagerMessages({
-      maxNumberOfMessages: options?.maxMessages ?? env.SQS_MAX_MESSAGES,
-      waitTimeSeconds: options?.waitTimeSeconds ?? env.SQS_WAIT_TIME_SECONDS,
-    });
+    let messages: Message[];
+    try {
+      messages = await this.sqs.receiveWagerMessages({
+        maxNumberOfMessages: options?.maxMessages ?? env.SQS_MAX_MESSAGES,
+        waitTimeSeconds: options?.waitTimeSeconds ?? env.SQS_WAIT_TIME_SECONDS,
+        abortSignal: options?.abortSignal,
+      });
+    } catch (error) {
+      if (this.shuttingDown || options?.abortSignal?.aborted) {
+        return { received: 0, acked: 0, dlq: 0, retried: 0 };
+      }
+      throw error;
+    }
 
     let acked = 0;
     let dlq = 0;
@@ -147,16 +159,23 @@ export class SqsConsumerService
         continue;
       }
 
-      const outcome = await this.handleMessage(
+      const task = this.handleMessage(
         msg,
         options?.faultInjectionOverride,
       );
-      if (outcome === "ACK") {
-        acked += 1;
-      } else if (outcome === "DLQ") {
-        dlq += 1;
-      } else {
-        retried += 1;
+      const tracked = task.then(() => undefined);
+      this.inFlight.add(tracked);
+      try {
+        const outcome = await task;
+        if (outcome === "ACK") {
+          acked += 1;
+        } else if (outcome === "DLQ") {
+          dlq += 1;
+        } else {
+          retried += 1;
+        }
+      } finally {
+        this.inFlight.delete(tracked);
       }
     }
 
@@ -359,22 +378,21 @@ export class SqsConsumerService
   private async runLoop(): Promise<void> {
     const env = loadEnv();
     while (this.running) {
-      const task = this.pollOnce({
-        waitTimeSeconds: env.SQS_WAIT_TIME_SECONDS,
-        maxMessages: env.SQS_MAX_MESSAGES,
-      })
-        .then(() => undefined)
-        .catch((err) => {
+      this.receiveAbortController = new AbortController();
+      try {
+        await this.pollOnce({
+          waitTimeSeconds: env.SQS_WAIT_TIME_SECONDS,
+          maxMessages: env.SQS_MAX_MESSAGES,
+          abortSignal: this.receiveAbortController.signal,
+        });
+      } catch (err) {
+        if (!this.shuttingDown) {
           this.logger.error("SQS consumer poll loop error", {
             errorMessage: err instanceof Error ? err.message : String(err),
           });
-        });
-
-      this.inFlight.add(task);
-      try {
-        await task;
+        }
       } finally {
-        this.inFlight.delete(task);
+        this.receiveAbortController = null;
       }
     }
   }

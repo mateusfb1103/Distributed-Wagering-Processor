@@ -2,7 +2,7 @@
 
 Serviço financeiro distribuído para processamento de transações de apostas (`BET`, `WIN`, `LOSS`, `REFUND`, `ROLLBACK`) recebidas de múltiplos provedores via HTTP e AWS SQS, construído com **Bun**, **TypeScript** (estrito), **NestJS**, **MikroORM** e **PostgreSQL**.
 
-> **Status do projeto:** Fase 4 (Outbox Publisher D09, Consumer SQS D10, Pending Reference Worker D11 e `APP_ROLES`) concluída na branch `fase-4/mensageria-workers`.
+> **Status do projeto:** **Concluído (Fases 0–5 implementadas e validadas)** — domínio puro, schema PostgreSQL com triggers R-a/R-b/R-c/R-d, API HTTP + reconciliação, mensageria SQS FIFO (Consumer + Outbox + Pending Worker) e suíte completa de testes unitários, integração e concorrência/resiliência.
 
 ## Endpoints HTTP
 
@@ -11,12 +11,28 @@ Serviço financeiro distribuído para processamento de transações de apostas (
 | `GET` | `/health/live` | Liveness probe (`200`) |
 | `GET` | `/health/ready` | Readiness probe verificando PostgreSQL e SQS (`200` / `503`) |
 | `GET` | `/metrics` | Métricas Prometheus (`prom-client`) |
-| `POST` | `/wallets` | Cria carteira (`initialBalance` opcional, padrão `"0.00"`) |
-| `GET` | `/wallets/:walletId` | Consulta saldo e versão da carteira |
-| `GET` | `/wallets/:walletId/ledger` | Pagina histórico do razão (`limit` 1..200, `order`, `cursor`) |
+| `POST` | `/wallets` | Cria carteira (`initialBalance` opcional, padrão `"0.00"`; `201` / `400` / `409`) |
+| `GET` | `/wallets/:walletId` | Consulta saldo e versão da carteira (`200` / `404`) |
+| `GET` | `/wallets/:walletId/ledger` | Pagina histórico do razão (`limit` 1..200, `order`, `cursor`; `200` / `404`) |
 | `POST` | `/wager-transactions` | Submete `BET`/`WIN`/`LOSS`/`REFUND`/`ROLLBACK` (`201` novo, `200` replay, `202` `PENDING_REFERENCE`, `422` rejeição/ausência de carteira, `400`/`409`/`503`) |
-| `GET` | `/wager-transactions/:transactionId` | Consulta transação persistida |
+| `GET` | `/wager-transactions/:transactionId` | Consulta transação persistida (`200` / `404`) |
 | `POST` | `/reconciliation/run` | Verifica invariante `wallet.balance == Σ ledger` (global ou `{ walletId }`) |
+
+## Mensageria SQS FIFO e Papéis (`APP_ROLES`)
+
+- **Filas (`bun run sqs:init`):**
+  - `wager-transactions.fifo`: fila de entrada com `RedrivePolicy` (`maxReceiveCount = 5`) apontando para `wager-transactions-dlq.fifo`.
+  - `wager-transactions-dlq.fifo`: DLQ para erros permanentes (com `MessageAttributes`: `dlqReason`, `failureCode`, `originalMessageId`) e exaustão de retentativas transitórias.
+  - `wagering-events.fifo`: fila de saída publicada pelo Outbox Publisher (`MessageGroupId = walletId`, `MessageDeduplicationId = eventId`).
+- **`APP_ROLES`** (padrão `api,consumer,outbox,pending-worker`): permite executar todos os papéis em um único processo ou isolar instâncias dedicadas (`api`, `consumer`, `outbox`, `pending-worker`).
+
+## Variáveis de ambiente principais
+
+Consulte [.env.example](./.env.example) para os valores padrão:
+- `DATABASE_URL` (`dwp_app`) e `DATABASE_MIGRATOR_URL` (`dwp_migrator`) — separação de privilégios D06 R-d.
+- `SQS_ENDPOINT`, `SQS_WAGER_QUEUE_NAME`, `SQS_WAGER_DLQ_NAME`, `SQS_EVENTS_QUEUE_NAME`.
+- `LOCK_TIMEOUT_MS`, `PENDING_REFERENCE_TTL_MS`, `SHUTDOWN_TIMEOUT_MS`, `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_LEASE_MS`, `PENDING_WORKER_POLL_INTERVAL_MS`, `PENDING_WORKER_BATCH_SIZE`, `SQS_WAIT_TIME_SECONDS`, `SQS_MAX_MESSAGES`.
+- `FAULT_INJECTION_POINT` (apenas desenvolvimento/teste; ignorado automaticamente quando `NODE_ENV=production`).
 
 ## Setup local e comandos
 
@@ -37,10 +53,16 @@ bun run db:migrate
 bun run db:rollback
 bun run db:migrate
 
-# 5. Verificações e testes
+# 5. Iniciar aplicação (papéis definidos em APP_ROLES)
+bun run start
+
+# 6. Verificações estáticas e suítes de testes
 bun run typecheck
 bun run lint
+bun run test:unit
 bun run test:integration
+bun run test:concurrency
+bun test
 ```
 
 ---
