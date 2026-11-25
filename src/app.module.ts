@@ -7,6 +7,7 @@ import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { buildMikroOrmConfig } from "./database/mikro-orm.config.ts";
 import { HealthModule } from "./health/health.module.ts";
+import { MessagingModule } from "./messaging/messaging.module.ts";
 import { ReconciliationModule } from "./reconciliation/reconciliation.module.ts";
 import { AuthGuard } from "./shared/infrastructure/auth/auth.guard.ts";
 import { CorrelationIdMiddleware } from "./shared/infrastructure/http/correlation-id.middleware.ts";
@@ -25,6 +26,7 @@ import { WalletModule } from "./wallet/wallet.module.ts";
     WalletModule,
     WageringModule,
     ReconciliationModule,
+    MessagingModule,
   ],
   providers: [
     {

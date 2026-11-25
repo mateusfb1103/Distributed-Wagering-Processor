@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { type EntityManager, MikroORM } from "@mikro-orm/postgresql";
 import { OutboxMessageSchema } from "../../database/entities/outbox-message.entity.ts";
 import { WagerTransactionSchema } from "../../database/entities/wager-transaction.entity.ts";
@@ -33,6 +33,7 @@ import {
   wagerTransactionToDomain,
   wagerTransactionToRecord,
 } from "../infrastructure/persistence/wager-transaction.mapper.ts";
+import { PendingWakeUpRegistry } from "./pending-wakeup.registry.ts";
 
 export interface SubmitWagerTransactionCommand {
   readonly providerId: string;
@@ -82,6 +83,9 @@ export class SubmitWagerTransactionUseCase {
     private readonly providerIdentity: ProviderIdentityPort,
     @Inject(MetricsService) private readonly metrics: MetricsService,
     @Inject(AppLogger) private readonly logger: AppLogger,
+    @Optional()
+    @Inject(PendingWakeUpRegistry)
+    private readonly wakeUpRegistry?: PendingWakeUpRegistry,
   ) {}
 
   async execute(
@@ -157,6 +161,10 @@ export class SubmitWagerTransactionUseCase {
           idempotentReplay: result.idempotentReplay,
           source,
         });
+
+        if (result.wokeUpPendingCount > 0) {
+          this.wakeUpRegistry?.trigger();
+        }
 
         return result;
       } catch (error) {
