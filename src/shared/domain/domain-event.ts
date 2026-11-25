@@ -2,7 +2,7 @@ export type AggregateType = "Wallet" | "WagerTransaction";
 
 export interface DomainEvent<
   TType extends string = string,
-  TPayload = Record<string, unknown>,
+  TPayload extends object = Record<string, unknown>,
 > {
   readonly eventId: string;
   readonly eventType: TType;

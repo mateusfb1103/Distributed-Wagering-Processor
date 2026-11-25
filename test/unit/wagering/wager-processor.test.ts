@@ -3,6 +3,7 @@ import {
   ContractViolationError,
   InvalidStateTransitionError,
 } from "../../../src/shared/domain/domain-error.ts";
+import type { FailureCode } from "../../../src/shared/domain/failure-codes.ts";
 import type { IdGenerator } from "../../../src/shared/domain/id-generator.ts";
 import { Money } from "../../../src/shared/domain/money.ts";
 import { hashWagerPayload } from "../../../src/shared/domain/payload-hasher.ts";
@@ -82,7 +83,7 @@ describe("WagerProcessor & WagerTransaction rules", () => {
 
     const invalidCases: Array<{
       cmd: ReturnType<typeof makeCommand>;
-      code: string;
+      code: FailureCode;
     }> = [
       { cmd: makeCommand({ kind: "OPENING" }), code: "UNSUPPORTED_KIND" },
       { cmd: makeCommand({ kind: "CASH_OUT" }), code: "UNSUPPORTED_KIND" },
